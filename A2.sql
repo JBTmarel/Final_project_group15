@@ -12,6 +12,27 @@ GROUP BY eining_heiti,
     tegund_maelingar
 ORDER BY eining_heiti, month ASC, total_kwh DESC
 
+--Query 2:
+-- hér er röðun á customer name ekki rétt, ÍBV er röngum stað
+SELECT 
+    eining_heiti AS power_plant_source,
+    EXTRACT(YEAR FROM timi) AS year,
+    EXTRACT(MONTH FROM timi) AS month,
+    notandi_heiti AS customer_name,
+    SUM(gildi_kwh) AS total_kwh
+FROM raforka_legacy.orku_maelingar
+WHERE tegund_maelingar = 'Úttekt' 
+    AND timi >= '2025-01-01' 
+    AND timi < '2026-01-01'
+GROUP BY
+    eining_heiti,
+    EXTRACT(YEAR FROM timi),
+    EXTRACT(MONTH FROM timi),
+    notandi_heiti
+ORDER BY
+    power_plant_source,
+    month asc,
+    customer_name asc;
 
 -- Query 3:
 -- View for montly aggregation
