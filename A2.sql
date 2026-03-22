@@ -9,3 +9,4 @@ GROUP BY eining_heiti,
     EXTRACT(year from timi),
     tegund_maelingar
 ORDER BY eining_heiti, month ASC, total_kwh DESC
+
