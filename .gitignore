@@ -1,3 +1,1 @@
-FinalProject/
-!FinalProject/API/Legacy api/app/services/service.py
-!FinalProject/API/Legacy api/app/routes/endpoints.py
+FinalProject/API/Legacy api/app/db/session.py
