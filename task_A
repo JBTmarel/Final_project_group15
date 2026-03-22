@@ -1,0 +1,52 @@
+
+
+-- Task A2
+-- Q2
+SELECT 
+    eining_heiti AS power_plant_source,
+    EXTRACT(YEAR FROM timi) AS year,
+    EXTRACT(MONTH FROM timi) AS month,
+    notandi_heiti AS customer_name,
+    SUM(gildi_kwh) AS total_kwh
+FROM raforka_legacy.orku_maelingar
+WHERE tegund_maelingar = 'Úttekt' 
+    AND timi >= '2025-01-01' 
+    AND timi < '2026-01-01'
+GROUP BY
+    eining_heiti,
+    EXTRACT(YEAR FROM timi),
+    EXTRACT(MONTH FROM timi),
+    notandi_heiti
+ORDER BY
+    power_plant_source,
+    month asc,
+    customer_name asc;
+
+
+-- Reflection
+SELECT
+    notandi_heiti AS customer_name,
+    SUM(gildi_kwh) AS total_kwh
+FROM raforka_legacy.orku_maelingar
+WHERE tegund_maelingar = 'Úttekt'
+  AND timi >= '2025-01-01'
+  AND timi < '2026-01-01'
+GROUP BY
+    notandi_heiti
+HAVING SUM(gildi_kwh) = (
+    SELECT MAX(total_kwh)
+    FROM (
+        SELECT SUM(gildi_kwh) AS total_kwh
+        FROM raforka_legacy.orku_maelingar
+        WHERE tegund_maelingar = 'Úttekt'
+          AND timi >= '2025-01-01'
+          AND timi < '2026-01-01'
+        GROUP BY notandi_heiti
+    ) 
+);
+
+
+
+
+
+
