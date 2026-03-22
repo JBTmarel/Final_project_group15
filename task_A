@@ -2,6 +2,8 @@
 
 -- Task A2
 -- Q2
+
+-- hér er röðun á customer name ekki rétt, ÍBV er röngum stað
 SELECT 
     eining_heiti AS power_plant_source,
     EXTRACT(YEAR FROM timi) AS year,
