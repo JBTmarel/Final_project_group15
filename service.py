@@ -1,5 +1,9 @@
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func, extract, text
+from app.models.monthly_energy_flow_model import MonthlyPlantEnergyFlowModel
+from app.models.monthly_company_usage_model import MonthlyCompanyUsageModel
+from app.models.monthly_plant_loss_ratios import MonthlyPlantLossRatiosModel
 from app.db.tables.orku_einingar import OrkuEiningar
 from app.models.orku_einingar_model import OrkuEiningarModel
 from app.db.tables.notendur_skraning import NotendurSkraning
@@ -168,51 +172,92 @@ async def insert_test_measurement_data(
 '''
 Service 1: get_monthly_energy_flow_data()
 '''
-
 def get_monthly_energy_flow_data(
-    power_plant_source: str,
-    measurement_type: str,
-    year: int,
-    offset: int,
-    month: int,
-    total_kWh: float,
-    db: Session,
+    from_date: datetime,
+    to_date: datetime,
+    db: Session
 ):
-    query = db.query(OrkuMaelingar).filter(
-        OrkuMaelingar.timi >= from_date,
-        OrkuMaelingar.timi <= to_date
-    )
-
-    if eining:
-        query = query.filter(OrkuMaelingar.eining_heiti == eining)
-    if tegund:
-        query = query.filter(OrkuMaelingar.tegund_maelingar == tegund)
-
     rows = (
-        query
-        .order_by(OrkuMaelingar.timi)
-        .limit(limit)
-        .offset(offset)
+        db.query(
+            OrkuMaelingar.eining_heiti.label("power_plant_source"),
+            extract("year", OrkuMaelingar.timi).label("year"),
+            extract("month", OrkuMaelingar.timi).label("month"),
+            OrkuMaelingar.tegund_maelingar.label("measurement_type"),
+            func.sum(OrkuMaelingar.gildi_kwh).label("total_kwh")
+        )
+        .filter(
+            OrkuMaelingar.timi >= from_date,
+            OrkuMaelingar.timi <= to_date
+        )
+        .group_by(
+            OrkuMaelingar.eining_heiti,
+            extract("month", OrkuMaelingar.timi),
+            extract("year", OrkuMaelingar.timi),
+            OrkuMaelingar.tegund_maelingar
+        )
+        .order_by(
+            OrkuMaelingar.eining_heiti,
+            extract("month", OrkuMaelingar.timi).asc(),
+            func.sum(OrkuMaelingar.gildi_kwh).desc()
+        )
         .all()
     )
 
     return [
-        OrkuMaelingarModel(
-            id=row.id,
-            eining_heiti=row.eining_heiti,
-            tegund_maelingar=row.tegund_maelingar,
-            sendandi_maelingar=row.sendandi_maelingar,
-            timi=row.timi,
-            gildi_kwh=row.gildi_kwh,
-            notandi_heiti=row.notandi_heiti
+        MonthlyPlantEnergyFlowModel(
+            power_plant_source=row.power_plant_source,
+            measurement_type=row.measurement_type,
+            year=int(row.year),
+            month=int(row.month),
+            total_kwh=row.total_kwh
         )
         for row in rows
     ]
-
-
 '''
 Service 2: get_monthly_company_usage_data()
 '''
+def get_monthly_company_usage_data(
+    from_date: datetime,
+    to_date: datetime,
+    db: Session
+):
+    rows = (
+        db.query(
+            OrkuMaelingar.eining_heiti.label("power_plant_source"),
+            extract("year", OrkuMaelingar.timi).label("year"),
+            extract("month", OrkuMaelingar.timi).label("month"),
+            OrkuMaelingar.notandi_heiti.label("customer_name"),
+            func.sum(OrkuMaelingar.gildi_kwh).label("total_kwh")
+        )
+        .filter(
+            OrkuMaelingar.timi >= '2025-01-01',
+            OrkuMaelingar.timi <= '2026-01-01',
+            OrkuMaelingar.tegund_maelingar == "Úttekt"
+        )
+        .group_by(
+            OrkuMaelingar.eining_heiti,
+            extract("year", OrkuMaelingar.timi),
+            extract("month", OrkuMaelingar.timi),
+            OrkuMaelingar.notandi_heiti
+        )
+        .order_by(
+            OrkuMaelingar.eining_heiti,
+            extract("month", OrkuMaelingar.timi).asc(),
+            OrkuMaelingar.notandi_heiti.desc()
+        )
+        .all()
+    )
+
+    return [
+        MonthlyPlantEnergyFlowModel(
+            power_plant_source=row.power_plant_source,
+            measurement_type=row.measurement_type,
+            year=int(row.year),
+            month=int(row.month),
+            total_kwh=row.total_kwh
+        )
+        for row in rows
+    ]
 
 '''
 Service 3: get_monthly_plant_loss_ratios_data()
