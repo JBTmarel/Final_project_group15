@@ -1,10 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-USER = ""
-PASSWORD = ""
-PORT = ""
-DATABASE_NAME = ""
+USER = "postgres"
+PASSWORD = "221103"
+PORT = "5432"
+DATABASE_NAME = "OrkuflaediIsland"
 
 # Database connection string
 DATABASE_URL = f"postgresql://{USER}:{PASSWORD}@localhost:{PORT}/{DATABASE_NAME}"
