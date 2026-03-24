@@ -21,8 +21,8 @@ CREATE TABLE raforka_updated.station (
     station_type TEXT NOT NULL,
     installed_date DATE NOT NULL,
     owner_id INTEGER REFERENCES raforka_updated.owner(id),
-    X_HNIT DOUBLE PRECISION,
-    Y_HNIT DOUBLE PRECISION
+    X_COORDINATE DOUBLE PRECISION,
+    Y_COORDINATE DOUBLE PRECISION
 );
 
 -- Power plant specialization
@@ -39,7 +39,7 @@ CREATE TABLE raforka_updated.substation (
 CREATE TABLE raforka_updated.customer (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
-    kennitala INTEGER NOT NULL UNIQUE,
+    SSN TEXT NOT NULL UNIQUE,
     founded_year INTEGER NOT NULL,
     X_HNIT DOUBLE PRECISION,
     Y_HNIT DOUBLE PRECISION,
@@ -49,42 +49,45 @@ CREATE TABLE raforka_updated.customer (
 
 -- Raw energy production at a power plant
 CREATE TABLE raforka_updated.production (
-    id SERIAL PRIMARY KEY,
     power_plant_id INTEGER NOT NULL REFERENCES raforka_updated.power_plant(power_plant_id),
     timestamp TIMESTAMP NOT NULL,
-    value_kwh NUMERIC NOT NULL
+    value_kwh NUMERIC NOT NULL,
+    PRIMARY KEY (power_plant_id, timestamp)
 );
 
--- Energy injected into a substation after plant-level losses
+-- Energy injected at a substation from a power plant
 CREATE TABLE raforka_updated.injection (
-    id SERIAL PRIMARY KEY,
+    power_plant_id INTEGER NOT NULL REFERENCES raforka_updated.power_plant(power_plant_id),
     substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
     timestamp TIMESTAMP NOT NULL,
-    value_kwh NUMERIC NOT NULL
+    value_kwh NUMERIC NOT NULL,
+    PRIMARY KEY (power_plant_id, substation_id, timestamp)
 );
 
 -- Energy withdrawn at S3 by a customer
 CREATE TABLE raforka_updated.withdrawal (
-    id SERIAL PRIMARY KEY,
     customer_id INTEGER NOT NULL REFERENCES raforka_updated.customer(id),
     timestamp TIMESTAMP NOT NULL,
-    value_kwh NUMERIC NOT NULL
+    value_kwh NUMERIC NOT NULL,
+    PRIMARY KEY (customer_id, timestamp)
 );
 
 -- Plant to substation (P → S)
 CREATE TABLE raforka_updated.plant_connection (
     id SERIAL PRIMARY KEY,
-    power_plant_id INTEGER NOT NULL REFERENCES raforka_updated.power_plant(id),
-    substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(id),
-    distance_km DOUBLE PRECISION
+    power_plant_id INTEGER NOT NULL REFERENCES raforka_updated.power_plant(power_plant_id),
+    substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
+    distance_km DOUBLE PRECISION,
+    CONSTRAINT unique_plant_substation UNIQUE (power_plant_id, substation_id)
 );
 
 -- Substation to substation (S → S)
 CREATE TABLE raforka_updated.substation_connection (
     id SERIAL PRIMARY KEY,
-    from_substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(id),
-    to_substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(id),
-    distance_km DOUBLE PRECISION
+    from_substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
+    to_substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
+    distance_km DOUBLE PRECISION,
+    CONSTRAINT no_self_connection CHECK (from_substation_id <> to_substation_id)
 );
 
 
