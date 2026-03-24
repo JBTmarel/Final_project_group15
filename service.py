@@ -1,5 +1,5 @@
 from fastapi import UploadFile, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, extract, text
 from app.models.monthly_energy_flow_model import MonthlyPlantEnergyFlowModel
 from app.models.monthly_company_usage_model import MonthlyCompanyUsageModel
@@ -262,3 +262,73 @@ def get_monthly_company_usage_data(
 '''
 Service 3: get_monthly_plant_loss_ratios_data()
 '''
+
+def get_monthly_plant_loss_ratios_data(
+    from_date: datetime,
+    to_date: datetime,
+    db: Session
+):
+    # Subquery representing the view
+    monthly_plant_totals = (
+        db.query(
+            OrkuMaelingar.eining_heiti.label("power_plant_source"),
+            extract("year", OrkuMaelingar.timi).label("year"),
+            extract("month", OrkuMaelingar.timi).label("month"),
+            OrkuMaelingar.tegund_maelingar.label("tegund_maelingar"),
+            func.sum(OrkuMaelingar.gildi_kwh).label("total_kwh")
+        )
+        .filter(
+            OrkuMaelingar.timi >= from_date,
+            OrkuMaelingar.timi <= to_date
+        )
+        .group_by(
+            OrkuMaelingar.eining_heiti,
+            extract("year", OrkuMaelingar.timi),
+            extract("month", OrkuMaelingar.timi),
+            OrkuMaelingar.tegund_maelingar
+        )
+        .subquery()
+    )
+
+    # Aliases for the three joins (f, i, u)
+    f = aliased(monthly_plant_totals, name="f")
+    i = aliased(monthly_plant_totals, name="i")
+    u = aliased(monthly_plant_totals, name="u")
+
+    rows = (
+        db.query(
+            f.c.power_plant_source,
+            func.avg(
+                (f.c.total_kwh - i.c.total_kwh) / f.c.total_kwh
+            ).label("plant_to_substation_loss_ratio"),
+            func.avg(
+                (f.c.total_kwh - u.c.total_kwh) / f.c.total_kwh
+            ).label("total_system_loss_ratio")
+        )
+        .join(i, 
+            (f.c.power_plant_source == i.c.power_plant_source) &
+            (f.c.month == i.c.month) &
+            (f.c.year == i.c.year) &
+            (i.c.tegund_maelingar == "Innmötun")
+        )
+        .join(u,
+            (f.c.power_plant_source == u.c.power_plant_source) &
+            (f.c.month == u.c.month) &
+            (f.c.year == u.c.year) &
+            (u.c.tegund_maelingar == "Úttekt")
+        )
+        .filter(f.c.tegund_maelingar == "Framleiðsla")
+        .group_by(f.c.power_plant_source)
+        .order_by(f.c.power_plant_source)
+        .all()
+    )
+
+    return [
+        MonthlyPlantLossRatiosModel(
+            power_plant_source=row.power_plant_source,
+            plant_to_substation_loss_ratio=row.plant_to_substation_loss_ratio,
+            total_system_loss_ratio=row.total_system_loss_ratio
+        )
+        for row in rows
+    ]
+
