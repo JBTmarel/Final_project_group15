@@ -41,8 +41,8 @@ CREATE TABLE raforka_updated.customer (
     name TEXT NOT NULL,
     SSN TEXT NOT NULL UNIQUE,
     founded_year INTEGER NOT NULL,
-    X_HNIT DOUBLE PRECISION,
-    Y_HNIT DOUBLE PRECISION,
+    X_COORDINATE DOUBLE PRECISION,
+    Y_COORDINATES DOUBLE PRECISION,
     owner_id INTEGER NOT NULL,
     FOREIGN KEY (owner_id) REFERENCES raforka_updated.owner(id)
 );
@@ -67,9 +67,10 @@ CREATE TABLE raforka_updated.injection (
 -- Energy withdrawn at S3 by a customer
 CREATE TABLE raforka_updated.withdrawal (
     customer_id INTEGER NOT NULL REFERENCES raforka_updated.customer(id),
+    substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id), 
     timestamp TIMESTAMP NOT NULL,
     value_kwh NUMERIC NOT NULL,
-    PRIMARY KEY (customer_id, timestamp)
+    PRIMARY KEY (customer_id, substation_id, timestamp)
 );
 
 -- Plant to substation (P → S)
