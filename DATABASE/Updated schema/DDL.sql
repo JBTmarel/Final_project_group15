@@ -51,6 +51,7 @@ CREATE TABLE raforka_updated.measurement (
 -- Transmission lines between substations (for Part F)
 CREATE TABLE raforka_updated.transmission_line (
     id SERIAL PRIMARY KEY,
+    from_plant_id INTEGER REFERENCES raforka_updated.power_plant(id),
     from_substation_id INTEGER REFERENCES raforka_updated.substation(id),
     to_substation_id INTEGER REFERENCES raforka_updated.substation(id),
     distance_km DOUBLE PRECISION
