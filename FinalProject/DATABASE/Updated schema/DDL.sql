@@ -1,5 +1,8 @@
--- Task C3: Normalized Schema Design
-CREATE SCHEMA IF NOT EXISTS raforka_updated;
+-- Task C3:
+
+-- Reset the Schema
+DROP SCHEMA IF EXISTS raforka_updated CASCADE;
+CREATE SCHEMA raforka_updated;
 
 -- 1. Owners Table
 CREATE TABLE raforka_updated.owner(
