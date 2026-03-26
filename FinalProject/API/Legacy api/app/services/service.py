@@ -214,9 +214,9 @@ def get_monthly_energy_flow_data(
         for row in rows
     ]
 '''
-Service 2: get_monthly_company_usage_data()
+Service 2: get_monthly_customer_usage_data()
 '''
-def get_monthly_company_usage_data(
+def get_monthly_customer_usage_data(
     from_date: datetime,
     to_date: datetime,
     db: Session
