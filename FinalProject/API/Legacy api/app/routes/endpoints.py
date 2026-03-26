@@ -14,6 +14,7 @@ from app.services.service import (
     get_notendur_skraning_data,
     get_orku_maelingar_data,
     insert_test_measurement_data,
+    get_monthly_energy_flow_data,
     get_monthly_customer_usage_data,
     get_monthly_plant_loss_ratios_data
 )
@@ -92,7 +93,7 @@ async def insert_test_measurement(
 Endpoint 1: get_monthly_energy_flow()
 '''
 @router.get("/monthly-energy-flow")
-def get_monthly_energy_flow(
+def get_monthly_energy_flow_data(
     from_date: datetime | None = None,
     to_date: datetime | None = None,
     db: Session = Depends(get_orkuflaedi_session)

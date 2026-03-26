@@ -1,53 +1,46 @@
--- Task C3
+-- Task C3: Normalized Schema Design
+CREATE SCHEMA IF NOT EXISTS raforka_updated;
 
-CREATE SCHEMA raforka_updated;
-
-ALTER SCHEMA raforka_updated OWNER TO bjarki1312;
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
--- Table for owners
+-- 1. Owners Table
 CREATE TABLE raforka_updated.owner(
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE
 );
 
+-- 2. Base Station Table
 CREATE TABLE raforka_updated.station (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    type TEXT NOT NULL,
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL, 
     station_type TEXT NOT NULL,
-    installed_date DATE NOT NULL,
+    installed_date DATE,
     owner_id INTEGER REFERENCES raforka_updated.owner(id),
-    X_COORDINATE DOUBLE PRECISION,
-    Y_COORDINATE DOUBLE PRECISION
+    x_coordinates DOUBLE PRECISION NOT NULL,
+    y_coordinates DOUBLE PRECISION NOT NULL
 );
 
--- Power plant specialization
+-- 3. Power Plant Specialization
 CREATE TABLE raforka_updated.power_plant (
     power_plant_id INTEGER PRIMARY KEY REFERENCES raforka_updated.station(id)
 );
 
--- Substation specialization
+-- 4. Substation Specialization
 CREATE TABLE raforka_updated.substation (
     substation_id INTEGER PRIMARY KEY REFERENCES raforka_updated.station(id)
 );
 
--- Customers with proper types
+-- 5. Customers Table
 CREATE TABLE raforka_updated.customer (
-    id SERIAL PRIMARY KEY,
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name TEXT NOT NULL,
-    SSN TEXT NOT NULL UNIQUE,
-    founded_year INTEGER NOT NULL,
-    X_COORDINATE DOUBLE PRECISION,
-    Y_COORDINATES DOUBLE PRECISION,
-    owner_id INTEGER NOT NULL,
-    FOREIGN KEY (owner_id) REFERENCES raforka_updated.owner(id)
+    ssn TEXT NOT NULL UNIQUE,
+    founded_year INTEGER,
+    x_coordinates DOUBLE PRECISION,
+    y_coordinates DOUBLE PRECISION, 
+    owner_id INTEGER NOT NULL REFERENCES raforka_updated.owner(id)
 );
 
--- Raw energy production at a power plant
+-- 6. Production (Weak Entity)
 CREATE TABLE raforka_updated.production (
     power_plant_id INTEGER NOT NULL REFERENCES raforka_updated.power_plant(power_plant_id),
     timestamp TIMESTAMP NOT NULL,
@@ -55,42 +48,36 @@ CREATE TABLE raforka_updated.production (
     PRIMARY KEY (power_plant_id, timestamp)
 );
 
--- Energy injected at a substation from a power plant
-CREATE TABLE raforka_updated.injection (
-    power_plant_id INTEGER NOT NULL REFERENCES raforka_updated.power_plant(power_plant_id),
+-- 7. Injection (Connecting Production to Substation)
+-- This represents the 'connects_to' diamond between Production and Substation
+CREATE TABLE raforka_updated.injects_to(
+    power_plant_id INTEGER NOT NULL,
+    production_timestamp TIMESTAMP NOT NULL,
     substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
-    timestamp TIMESTAMP NOT NULL,
     value_kwh NUMERIC NOT NULL,
-    PRIMARY KEY (power_plant_id, substation_id, timestamp)
+    timestamp TIMESTAMP NOT NULL,
+    PRIMARY KEY (power_plant_id, production_timestamp, substation_id),
+    FOREIGN KEY (power_plant_id, production_timestamp) 
+        REFERENCES raforka_updated.production(power_plant_id, timestamp)
 );
 
--- Energy withdrawn at S3 by a customer
-CREATE TABLE raforka_updated.withdrawal (
+-- 8. Withdrawal (Represented by 'withdraws' relationship)
+CREATE TABLE raforka_updated.withdraws_from(
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     customer_id INTEGER NOT NULL REFERENCES raforka_updated.customer(id),
     substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id), 
     timestamp TIMESTAMP NOT NULL,
-    value_kwh NUMERIC NOT NULL,
-    PRIMARY KEY (customer_id, substation_id, timestamp)
+    value_kwh NUMERIC NOT NULL
 );
 
--- Plant to substation (P → S)
-CREATE TABLE raforka_updated.plant_connection (
-    id SERIAL PRIMARY KEY,
-    power_plant_id INTEGER NOT NULL REFERENCES raforka_updated.power_plant(power_plant_id),
-    substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
-    distance_km DOUBLE PRECISION,
-    CONSTRAINT unique_plant_substation UNIQUE (power_plant_id, substation_id)
-);
-
--- Substation to substation (S → S)
-CREATE TABLE raforka_updated.substation_connection (
-    id SERIAL PRIMARY KEY,
+-- 9. Substation Connections (Self-referencing 'connects_to')
+CREATE TABLE raforka_updated.connects_to(
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     from_substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
     to_substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
-    distance_km DOUBLE PRECISION,
-    CONSTRAINT no_self_connection CHECK (from_substation_id <> to_substation_id)
+    distance DOUBLE PRECISION NOT NULL, 
+    value_kwh DOUBLE PRECISION,         -- To store the estimated flow from Part F
+    max_capacity_mw DOUBLE PRECISION DEFAULT 0,
+    CONSTRAINT no_self_connection CHECK (from_substation_id <> to_substation_id),
+    CONSTRAINT unique_connection UNIQUE (from_substation_id, to_substation_id)
 );
-
-
-
--- Task D1
