@@ -1,5 +1,9 @@
 from fastapi import UploadFile, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy import func, extract, text
+from app.models.monthly_energy_flow_model import MonthlyPlantEnergyFlowModel
+from app.models.monthly_company_usage_model import MonthlyCompanyUsageModel
+from app.models.monthly_plant_loss_ratios import MonthlyPlantLossRatiosModel
 from app.db.tables.orku_einingar import OrkuEiningar
 from app.models.orku_einingar_model import OrkuEiningarModel
 from app.db.tables.notendur_skraning import NotendurSkraning
@@ -11,10 +15,6 @@ from app.models.parsed_data.test_measurement_data import TestMeasurementData
 from app.parsers.parse_test_measurment_csv import parse_test_measurement_csv
 from app.utils.validate_file_type import validate_file_type
 from datetime import datetime
-from sqlalchemy import func
-
-
-
 '''
 Services already in place
 '''
@@ -249,9 +249,9 @@ def get_monthly_company_usage_data(
     )
 
     return [
-        MonthlyPlantEnergyFlowModel(
+        MonthlyCompanyUsageModel(
             power_plant_source=row.power_plant_source,
-            measurement_type=row.measurement_type,
+            customer_name=row.customer_name,
             year=int(row.year),
             month=int(row.month),
             total_kwh=row.total_kwh
