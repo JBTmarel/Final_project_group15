@@ -42,7 +42,7 @@ def migrate():
             SELECT 
                 oe.heiti, oe.tegund, oe.tegund_stod,
                 CASE 
-                    WHEN oe.ar_uppsett IS NOT NULL THEN MAKE_DATE(CAST(oe.ar_uppsett AS INT), 1, 1) 
+                    WHEN oe.ar_uppsett IS NOT NULL THEN MAKE_DATE(CAST(oe.ar_uppsett AS INT), CAST(oe.manudur_uppsett AS INT), CAST(oe.dagur_uppsett AS INT)) 
                     ELSE NULL 
                 END,
                 o.id, oe."X_HNIT", oe."Y_HNIT"
