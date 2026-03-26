@@ -166,145 +166,169 @@ async def insert_test_measurement_data(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     
+
 # Task B2
 
 '''
 Service 1: get_monthly_energy_flow_data()
 '''
-from sqlalchemy import text
-
-def get_monthly_energy_flow_data(db, from_date, to_date):
-    query = text("""
-        SELECT
-            eining_heiti AS power_plant_source,
-            EXTRACT(YEAR FROM timi) AS year,
-            EXTRACT(MONTH FROM timi) AS month,
-            tegund_maelingar AS measurement_type,
-            SUM(gildi_kwh) AS total_kwh
-        FROM raforka_legacy.orku_maelingar
-        WHERE timi >= :from_date
-          AND timi < :to_date
-        GROUP BY
-            eining_heiti,
-            EXTRACT(YEAR FROM timi),
-            EXTRACT(MONTH FROM timi),
-            tegund_maelingar
-        ORDER BY
-            power_plant_source,
-            month ASC,
-            total_kwh DESC
-    """)
-
-    result = db.execute(query, {"from_date": from_date, "to_date": to_date})
+def get_monthly_energy_flow_data(
+    from_date: datetime,
+    to_date: datetime,
+    db: Session
+):
+    rows = (
+        db.query(
+            OrkuMaelingar.eining_heiti.label("power_plant_source"),
+            extract("year", OrkuMaelingar.timi).label("year"),
+            extract("month", OrkuMaelingar.timi).label("month"),
+            OrkuMaelingar.tegund_maelingar.label("measurement_type"),
+            func.sum(OrkuMaelingar.gildi_kwh).label("total_kwh")
+        )
+        .filter(
+            OrkuMaelingar.timi >= from_date,
+            OrkuMaelingar.timi <= to_date
+        )
+        .group_by(
+            OrkuMaelingar.eining_heiti,
+            extract("month", OrkuMaelingar.timi),
+            extract("year", OrkuMaelingar.timi),
+            OrkuMaelingar.tegund_maelingar
+        )
+        .order_by(
+            OrkuMaelingar.eining_heiti,
+            extract("month", OrkuMaelingar.timi).asc(),
+            func.sum(OrkuMaelingar.gildi_kwh).desc()
+        )
+        .all()
+    )
 
     return [
-        {
-            "power_plant_source": row.power_plant_source,
-            "year": int(row.year),
-            "month": int(row.month),
-            "measurement_type": row.measurement_type,
-            "total_kwh": float(row.total_kwh),
-        }
-        for row in result
+        MonthlyPlantEnergyFlowModel(
+            power_plant_source=row.power_plant_source,
+            measurement_type=row.measurement_type,
+            year=int(row.year),
+            month=int(row.month),
+            total_kwh=row.total_kwh
+        )
+        for row in rows
     ]
-
 '''
 Service 2: get_monthly_company_usage_data()
 '''
-def get_monthly_customer_usage_data(db, from_date, to_date):
-    query = text("""
-        SELECT 
-            eining_heiti AS power_plant_source,
-            EXTRACT(YEAR FROM timi) AS year,
-            EXTRACT(MONTH FROM timi) AS month,
-            notandi_heiti AS customer_name,
-            SUM(gildi_kwh) AS total_kwh
-        FROM raforka_legacy.orku_maelingar
-        WHERE tegund_maelingar = 'Úttekt'
-          AND timi >= :from_date
-          AND timi < :to_date
-        GROUP BY
-            eining_heiti,
-            EXTRACT(YEAR FROM timi),
-            EXTRACT(MONTH FROM timi),
-            notandi_heiti
-        ORDER BY
-            power_plant_source,
-            month ASC,
-            customer_name ASC
-    """)
-
-    result = db.execute(query, {
-        "from_date": from_date,
-        "to_date": to_date
-    })
+def get_monthly_company_usage_data(
+    from_date: datetime,
+    to_date: datetime,
+    db: Session
+):
+    rows = (
+        db.query(
+            OrkuMaelingar.eining_heiti.label("power_plant_source"),
+            extract("year", OrkuMaelingar.timi).label("year"),
+            extract("month", OrkuMaelingar.timi).label("month"),
+            OrkuMaelingar.notandi_heiti.label("customer_name"),
+            func.sum(OrkuMaelingar.gildi_kwh).label("total_kwh")
+        )
+        .filter(
+            OrkuMaelingar.timi >= '2025-01-01',
+            OrkuMaelingar.timi <= '2026-01-01',
+            OrkuMaelingar.tegund_maelingar == "Úttekt"
+        )
+        .group_by(
+            OrkuMaelingar.eining_heiti,
+            extract("year", OrkuMaelingar.timi),
+            extract("month", OrkuMaelingar.timi),
+            OrkuMaelingar.notandi_heiti
+        )
+        .order_by(
+            OrkuMaelingar.eining_heiti,
+            extract("month", OrkuMaelingar.timi).asc(),
+            OrkuMaelingar.notandi_heiti.desc()
+        )
+        .all()
+    )
 
     return [
-        {
-            "power_plant_source": row.power_plant_source,
-            "year": int(row.year),
-            "month": int(row.month),
-            "customer_name": row.customer_name,
-            "total_kwh": float(row.total_kwh) if row.total_kwh is not None else 0.0
-        }
-        for row in result
+        MonthlyPlantEnergyFlowModel(
+            power_plant_source=row.power_plant_source,
+            measurement_type=row.measurement_type,
+            year=int(row.year),
+            month=int(row.month),
+            total_kwh=row.total_kwh
+        )
+        for row in rows
     ]
 
 '''
 Service 3: get_monthly_plant_loss_ratios_data()
 '''
-def get_monthly_plant_loss_ratios_data(db, from_date, to_date):
-    create_view_query = text("""
-        CREATE OR REPLACE VIEW monthly_plant_totals AS
-        SELECT
-            eining_heiti AS power_plant_source,
-            EXTRACT(YEAR FROM timi) AS year,
-            EXTRACT(MONTH FROM timi) AS month,
-            tegund_maelingar,
-            SUM(gildi_kwh) AS total_kwh
-        FROM raforka_legacy.orku_maelingar
-        GROUP BY
-            eining_heiti,
-            EXTRACT(YEAR FROM timi),
-            EXTRACT(MONTH FROM timi),
-            tegund_maelingar
-    """)
 
-    db.execute(create_view_query)
-    db.commit()
+def get_monthly_plant_loss_ratios_data(
+    from_date: datetime,
+    to_date: datetime,
+    db: Session
+):
+    # Subquery representing the view
+    monthly_plant_totals = (
+        db.query(
+            OrkuMaelingar.eining_heiti.label("power_plant_source"),
+            extract("year", OrkuMaelingar.timi).label("year"),
+            extract("month", OrkuMaelingar.timi).label("month"),
+            OrkuMaelingar.tegund_maelingar.label("tegund_maelingar"),
+            func.sum(OrkuMaelingar.gildi_kwh).label("total_kwh")
+        )
+        .filter(
+            OrkuMaelingar.timi >= from_date,
+            OrkuMaelingar.timi <= to_date
+        )
+        .group_by(
+            OrkuMaelingar.eining_heiti,
+            extract("year", OrkuMaelingar.timi),
+            extract("month", OrkuMaelingar.timi),
+            OrkuMaelingar.tegund_maelingar
+        )
+        .subquery()
+    )
 
-    query = text("""
-        SELECT
-            power_plant_source,
-            AVG((framleidsla - innmotun) / NULLIF(framleidsla, 0)) AS plant_to_substation_loss_ratio,
-            AVG((framleidsla - uttekt) / NULLIF(framleidsla, 0)) AS total_system_loss_ratio
-        FROM (
-            SELECT
-                power_plant_source,
-                year,
-                month,
-                SUM(CASE WHEN tegund_maelingar = 'Framleiðsla' THEN total_kwh END) AS framleidsla,
-                SUM(CASE WHEN tegund_maelingar = 'Innmötun' THEN total_kwh END) AS innmotun,
-                SUM(CASE WHEN tegund_maelingar = 'Úttekt' THEN total_kwh END) AS uttekt
-            FROM monthly_plant_totals
-            WHERE make_date(year::int, month::int, 1) >= date_trunc('month', :from_date)
-              AND make_date(year::int, month::int, 1) < date_trunc('month', :to_date)
-            GROUP BY power_plant_source, year, month
-        ) AS pivoted
-        GROUP BY power_plant_source
-        ORDER BY power_plant_source
-    """)
+    # Aliases for the three joins (f, i, u)
+    f = aliased(monthly_plant_totals, name="f")
+    i = aliased(monthly_plant_totals, name="i")
+    u = aliased(monthly_plant_totals, name="u")
 
-    result = db.execute(query, {
-        "from_date": from_date,
-        "to_date": to_date
-    })
+    rows = (
+        db.query(
+            f.c.power_plant_source,
+            func.avg(
+                (f.c.total_kwh - i.c.total_kwh) / f.c.total_kwh
+            ).label("plant_to_substation_loss_ratio"),
+            func.avg(
+                (f.c.total_kwh - u.c.total_kwh) / f.c.total_kwh
+            ).label("total_system_loss_ratio")
+        )
+        .join(i, 
+            (f.c.power_plant_source == i.c.power_plant_source) &
+            (f.c.month == i.c.month) &
+            (f.c.year == i.c.year) &
+            (i.c.tegund_maelingar == "Innmötun")
+        )
+        .join(u,
+            (f.c.power_plant_source == u.c.power_plant_source) &
+            (f.c.month == u.c.month) &
+            (f.c.year == u.c.year) &
+            (u.c.tegund_maelingar == "Úttekt")
+        )
+        .filter(f.c.tegund_maelingar == "Framleiðsla")
+        .group_by(f.c.power_plant_source)
+        .order_by(f.c.power_plant_source)
+        .all()
+    )
 
     return [
-        {
-            "power_plant_source": row.power_plant_source,
-            "plant_to_substation_loss_ratio": float(row.plant_to_substation_loss_ratio) if row.plant_to_substation_loss_ratio is not None else None,
-            "total_system_loss_ratio": float(row.total_system_loss_ratio) if row.total_system_loss_ratio is not None else None
-        }
-        for row in result
+        MonthlyPlantLossRatiosModel(
+            power_plant_source=row.power_plant_source,
+            plant_to_substation_loss_ratio=row.plant_to_substation_loss_ratio,
+            total_system_loss_ratio=row.total_system_loss_ratio
+        )
+        for row in rows
     ]
+
