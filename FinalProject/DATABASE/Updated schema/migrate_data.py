@@ -3,7 +3,7 @@ import math
 
 # --- CONFIGURATION ---
 USER = "postgres"
-PASSWORD = "221103"  # Replace with your actual password
+PASSWORD = "XXXX"  # Replace with your actual password
 PORT = "5432"
 HOST = "localhost"
 DATABASE_NAME = "OrkuflaediIsland"
@@ -42,7 +42,7 @@ def migrate():
             SELECT 
                 oe.heiti, oe.tegund, oe.tegund_stod,
                 CASE 
-                    WHEN oe.ar_uppsett IS NOT NULL THEN MAKE_DATE(CAST(oe.ar_uppsett AS INT), CAST(oe.manudur_uppsett AS INT), CAST(oe.dagur_uppsett AS INT)) 
+                    WHEN oe.ar_uppsett IS NOT NULL THEN MAKE_DATE(CAST(oe.ar_uppsett AS INT), CAST(oe.manudir_uppsett AS INT), CAST(oe.dagur_uppsett AS INT)) 
                     ELSE NULL 
                 END,
                 o.id, oe."X_HNIT", oe."Y_HNIT"
@@ -62,7 +62,7 @@ def migrate():
         # Step 4: Customers
         run_step(conn, "Step 4: Customers", f"""
             INSERT INTO {NEW_SCHEMA}.customer (name, ssn, founded_year, x_coordinates, y_coordinates, owner_id)
-            SELECT ns.heiti, ns.kennitala, ns.ar_stofnad, ns."X_HNIT", ns."Y_HNIT", o.id
+            SELECT ns.eigandi, ns.kennitala, ns.ar_stofnad, ns."X_HNIT", ns."Y_HNIT", o.id
             FROM {LEGACY_SCHEMA}.notendur_skraning ns
             JOIN {NEW_SCHEMA}.owner o ON ns.eigandi = o.name;
         """)
@@ -95,7 +95,7 @@ def migrate():
             SELECT c.id, sub.substation_id, om.timi, om.gildi_kwh
             FROM {LEGACY_SCHEMA}.orku_maelingar om
             JOIN {NEW_SCHEMA}.customer c ON om.notandi_heiti = c.name
-            JOIN {NEW_SCHEMA}.station s ON om.eining_heiti = s.name
+            JOIN {NEW_SCHEMA}.station s ON om.sendandi_maelingar = s.name
             JOIN {NEW_SCHEMA}.substation sub ON s.id = sub.substation_id
             WHERE om.tegund_maelingar = 'Úttekt';
         """)

@@ -1,3 +1,7 @@
+-- Task C4:
+
+
+-- Query 1 gamla frá Claude:
 WITH combined_measurements AS (
     -- 1. Production (Framleiðsla)
     -- Joins production to station to get the plant name
@@ -50,3 +54,29 @@ FROM combined_measurements
 WHERE year = 2025
 GROUP BY power_plant_source, measurement_type, year, month
 ORDER BY power_plant_source, month, measurement_type;
+
+
+-- Query 2:
+-- aftur sama ves með stafrófsröð
+SELECT
+    EXTRACT(YEAR FROM w.timestamp) AS year,
+    EXTRACT(MONTH FROM w.timestamp) AS month,
+    c.name AS customer_name,
+    SUM(w.value_kwh) AS total_kwh
+FROM raforka_updated.withdraws_from w
+JOIN raforka_updated.customer c
+    ON c.id = w.customer_id
+WHERE w.timestamp >= '2025-01-01'
+  AND w.timestamp < '2026-01-01'
+GROUP BY
+    EXTRACT(YEAR FROM w.timestamp),
+    EXTRACT(MONTH FROM w.timestamp),
+    c.name
+ORDER BY
+    month ASC,
+    customer_name ASC;
+
+
+-- Query 3:
+
+
