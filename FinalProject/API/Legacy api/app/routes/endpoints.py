@@ -19,7 +19,6 @@ from app.services.service import (
     get_monthly_plant_loss_ratios_data
 )
 
-
 router = APIRouter()
 db_name = "OrkuFlaediIsland"
 
@@ -93,7 +92,7 @@ async def insert_test_measurement(
 Endpoint 1: get_monthly_energy_flow()
 '''
 @router.get("/monthly-energy-flow")
-def get_monthly_energy_flow_data(
+def get_monthly_energy_flow_dataw(
     from_date: datetime | None = None,
     to_date: datetime | None = None,
     db: Session = Depends(get_orkuflaedi_session)
