@@ -1,11 +1,9 @@
 -- Task C4:
 
-
--- Query 1 gamla frá Claude:
+-- Query 1 - Frá Claude, mætti lesa yfir
 WITH combined_measurements AS (
-    -- 1. Production (Framleiðsla)
-    -- Joins production to station to get the plant name
-    SELECT 
+    -- Production (Framleiðsla)
+    SELECT
         s.name AS power_plant_source,
         'Framleiðsla' AS measurement_type,
         EXTRACT(YEAR FROM p.timestamp)::INTEGER AS year,
@@ -16,9 +14,8 @@ WITH combined_measurements AS (
 
     UNION ALL
 
-    -- 2. Injection (Innmötun)
-    -- Joins injects_to to station to get the source plant name
-    SELECT 
+    -- Injection (Innmötun)
+    SELECT
         s.name AS power_plant_source,
         'Innmötun' AS measurement_type,
         EXTRACT(YEAR FROM i.timestamp)::INTEGER AS year,
@@ -29,22 +26,22 @@ WITH combined_measurements AS (
 
     UNION ALL
 
-    -- 3. Withdrawal (Úttekt)
-    -- In your new schema, withdrawals are technically linked to Substations.
-    -- To attribute these to a specific plant for this A2 query, 
-    -- we rely on the logic that we know which plant's energy is being traced.
-    -- Note: If you didn't add a 'plant_name' column to 'withdraws_from', 
-    -- this specific part requires the Part F flow logic or a temporary mapping.
-    -- For now, we assume the relationship is tracked:
-    SELECT 
-        'P1_Þröstur' AS power_plant_source, -- Placeholder: Attribute based on your data logic
+    -- Withdrawal (Úttekt)
+    -- Join withdraws_from to injects_to via substation_id and timestamp
+    -- to trace back to the power plant
+    SELECT
+        s.name AS power_plant_source,
         'Úttekt' AS measurement_type,
         EXTRACT(YEAR FROM w.timestamp)::INTEGER AS year,
         EXTRACT(MONTH FROM w.timestamp)::INTEGER AS month,
         w.value_kwh
     FROM raforka_updated.withdraws_from w
+    JOIN raforka_updated.injects_to i 
+        ON w.substation_id = i.substation_id
+        AND w.timestamp = i.timestamp
+    JOIN raforka_updated.station s ON i.power_plant_id = s.id
 )
-SELECT 
+SELECT
     power_plant_source,
     measurement_type,
     year,
@@ -53,7 +50,7 @@ SELECT
 FROM combined_measurements
 WHERE year = 2025
 GROUP BY power_plant_source, measurement_type, year, month
-ORDER BY power_plant_source, month, measurement_type;
+ORDER BY power_plant_source, month ASC, total_kwh DESC;
 
 
 -- Query 2:

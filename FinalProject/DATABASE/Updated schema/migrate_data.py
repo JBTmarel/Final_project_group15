@@ -1,9 +1,10 @@
 from sqlalchemy import create_engine, text
 import math
 
+
 # --- CONFIGURATION ---
 USER = "postgres"
-PASSWORD = "XXXX"  # Replace with your actual password
+PASSWORD = "221103"  # Replace with your actual password
 PORT = "5432"
 HOST = "localhost"
 DATABASE_NAME = "OrkuflaediIsland"
@@ -25,6 +26,17 @@ def run_step(conn, title, sql):
 
 def migrate():
     with engine.begin() as conn:
+        print("--- STARTING CLEANUP ---")
+        # CASCADE automatically cleans up child tables (production, power_plant, etc.)
+        # RESTART IDENTITY resets the auto-incrementing IDs back to 1
+        conn.execute(text(f"""
+            TRUNCATE 
+                {NEW_SCHEMA}.owner, 
+                {NEW_SCHEMA}.station, 
+                {NEW_SCHEMA}.customer 
+            RESTART IDENTITY CASCADE;
+        """))
+        
         print("--- STARTING MIGRATION ---")
 
         # Step 1: Owners
