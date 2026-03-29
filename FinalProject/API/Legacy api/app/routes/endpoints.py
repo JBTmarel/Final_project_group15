@@ -92,7 +92,7 @@ async def insert_test_measurement(
 Endpoint 1: get_monthly_energy_flow()
 '''
 @router.get("/monthly-energy-flow")
-def get_monthly_energy_flow_dataw(
+def get_monthly_energy_flow(
     from_date: datetime | None = None,
     to_date: datetime | None = None,
     db: Session = Depends(get_orkuflaedi_session)
