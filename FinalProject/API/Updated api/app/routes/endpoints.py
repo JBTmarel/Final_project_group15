@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.services.service import (
     get_updated_monthly_energy_flow_data,
     get_updated_monthly_customer_usage_data,
+    get_updated_monthly_plant_loss_ratios_data,
     insert_test_measurement_data
 )
 from app.utils.validate_date_range import validate_date_range_helper
@@ -59,6 +60,20 @@ def get_updated_monthly_customer_usage(
 '''
 Endpoint 3: get_updated_monthly_plant_loss_ratios()
 '''
+@router.get("/updated/monthly-plant-loss-ratios")
+def get_updated_monthly_plant_loss_ratios(
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+    db: Session = Depends(get_orkuflaedi_session)
+):
+    print(f"Calling [GET] /{db_name}/updated/monthly-plant-loss-ratios")
+    from_date, to_date = validate_date_range_helper(
+        from_date,
+        to_date,
+        datetime(2025, 1, 1, 0, 0),
+        datetime(2026, 1, 1, 0, 0)
+    )
+    return get_updated_monthly_plant_loss_ratios_data(from_date, to_date, db)
 
 # Task E1
 

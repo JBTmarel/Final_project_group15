@@ -1,7 +1,7 @@
 # Task C5
 from fastapi import UploadFile, HTTPException
-from sqlalchemy.orm import Session, aliased
-from sqlalchemy import func, extract, text, union_all, literal
+from sqlalchemy.orm import Session
+from sqlalchemy import func, extract, union_all, literal
 from datetime import datetime
 
 from app.db.tables.production import Production
@@ -9,6 +9,7 @@ from app.db.tables.injects_to import InjectsTo
 from app.db.tables.withdraws_from import WithdrawsFrom
 from app.db.tables.station import Station
 from app.db.tables.customer import Customer
+from app.db.tables.v_monthly_plant_energy import VMonthlyPlantEnergy
 from app.models.monthly_energy_flow_model import MonthlyPlantEnergyFlowModel
 from app.models.monthly_company_usage_model import MonthlyCompanyUsageModel
 from app.models.monthly_plant_loss_ratios import MonthlyPlantLossRatiosModel
@@ -151,7 +152,43 @@ def get_updated_monthly_customer_usage_data(
     ]
 
 
-# Kannski óþarfi?
+'''
+Service 3: get_updated_monthly_plant_loss_ratios()
+'''
+
+def get_updated_monthly_plant_loss_ratios_data(
+    from_date: datetime,
+    to_date: datetime,
+    db: Session
+):
+    rows = (
+        db.query(
+            VMonthlyPlantEnergy.power_plant_source,
+            func.avg(
+                (VMonthlyPlantEnergy.production_kwh - VMonthlyPlantEnergy.injection_kwh) /
+                func.nullif(VMonthlyPlantEnergy.production_kwh, 0)
+            ).label("plant_to_substation_loss_ratio"),
+            func.avg(
+                (VMonthlyPlantEnergy.production_kwh - VMonthlyPlantEnergy.attributed_withdrawal_kwh) /
+                func.nullif(VMonthlyPlantEnergy.production_kwh, 0)
+            ).label("total_system_loss_ratio")
+        )
+        .group_by(VMonthlyPlantEnergy.power_plant_source)
+        .order_by(VMonthlyPlantEnergy.power_plant_source)
+        .all()
+    )
+
+    return [
+        MonthlyPlantLossRatiosModel(
+            power_plant_source=row.power_plant_source,
+            plant_to_substation_loss_ratio=row.plant_to_substation_loss_ratio,
+            total_system_loss_ratio=row.total_system_loss_ratio
+        )
+        for row in rows
+    ]
+
+
+# Kannski óþarfi? :
 
 async def insert_test_measurement_data(
     file: UploadFile,
