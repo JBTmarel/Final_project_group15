@@ -1,6 +1,6 @@
 -- Task C4:
 
--- Query 1 - Frá Claude, mætti lesa yfir
+-- Query 1 
 WITH combined_measurements AS (
     -- Production (Framleiðsla)
     SELECT
