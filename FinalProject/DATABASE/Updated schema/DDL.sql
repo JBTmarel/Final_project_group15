@@ -22,14 +22,12 @@ CREATE TABLE raforka_updated.station (
 
 -- 3. Power plant specialization
 CREATE TABLE raforka_updated.power_plant (
-    power_plant_id INTEGER PRIMARY KEY
-        REFERENCES raforka_updated.station(id)
+    power_plant_id INTEGER PRIMARY KEY REFERENCES raforka_updated.station(id)
 );
 
 -- 4. Substation specialization
 CREATE TABLE raforka_updated.substation (
-    substation_id INTEGER PRIMARY KEY
-        REFERENCES raforka_updated.station(id)
+    substation_id INTEGER PRIMARY KEY REFERENCES raforka_updated.station(id)
 );
 
 -- 5. Customers
@@ -47,114 +45,85 @@ CREATE TABLE raforka_updated.customer (
             founded_year IS NULL OR
             (founded_year >= 1800 AND founded_year <= EXTRACT(YEAR FROM CURRENT_DATE))
         ),
-    CONSTRAINT chk_customer_ssn_format
-        CHECK (ssn ~ '^\d{10}$'),
-    CONSTRAINT chk_customer_coords_both_or_neither
-        CHECK ((x_coordinates IS NULL) = (y_coordinates IS NULL))
+    CONSTRAINT chk_customer_ssn_format CHECK (ssn ~ '^\d{10}$'), -- Assuming Icelandic SSN format
+    CONSTRAINT chk_customer_coords_both_or_neither CHECK ((x_coordinates IS NULL) = (y_coordinates IS NULL))
 );
 
 -- 6. Production
 CREATE TABLE raforka_updated.production (
-    power_plant_id INTEGER NOT NULL
-        REFERENCES raforka_updated.power_plant(power_plant_id),
+    power_plant_id INTEGER NOT NULL REFERENCES raforka_updated.power_plant(power_plant_id),
     timestamp      TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     value_kwh      NUMERIC NOT NULL,
     PRIMARY KEY (power_plant_id, timestamp),
 
-    CONSTRAINT chk_production_kwh_positive
-        CHECK (value_kwh > 0)
+    CONSTRAINT chk_production_kwh_positive CHECK (value_kwh > 0)
 );
 
 -- 7. Injection
 CREATE TABLE raforka_updated.injects_to (
     power_plant_id       INTEGER NOT NULL,
     production_timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-    substation_id        INTEGER NOT NULL
-        REFERENCES raforka_updated.substation(substation_id),
+    substation_id        INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
     value_kwh            FLOAT NOT NULL,
     timestamp            TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     PRIMARY KEY (power_plant_id, production_timestamp, substation_id),
-    FOREIGN KEY (power_plant_id, production_timestamp)
-        REFERENCES raforka_updated.production(power_plant_id, timestamp),
+    FOREIGN KEY (power_plant_id, production_timestamp) REFERENCES raforka_updated.production(power_plant_id, timestamp),
 
-    CONSTRAINT chk_injects_kwh_positive
-        CHECK (value_kwh > 0),
-
-    CONSTRAINT chk_injection_after_production
-        CHECK (timestamp >= production_timestamp)
+    CONSTRAINT chk_injects_kwh_positive CHECK (value_kwh > 0),
+    CONSTRAINT chk_injection_after_production CHECK (timestamp >= production_timestamp)
 );
 
 -- 8. Withdrawal
 CREATE TABLE raforka_updated.withdraws_from (
     id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    customer_id   INTEGER NOT NULL
-        REFERENCES raforka_updated.customer(id),
-    substation_id INTEGER NOT NULL
-        REFERENCES raforka_updated.substation(substation_id),
+    customer_id   INTEGER NOT NULL REFERENCES raforka_updated.customer(id),
+    substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
     timestamp     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     value_kwh     NUMERIC NOT NULL,
-    power_plant_source_id INTEGER REFERENCES raforka_updated.power_plant(power_plant_id)
+    power_plant_source_id INTEGER REFERENCES raforka_updated.power_plant(power_plant_id),
 
-    CONSTRAINT chk_withdraws_kwh_positive
-        CHECK (value_kwh > 0),
+    CONSTRAINT chk_withdraws_kwh_positive CHECK (value_kwh > 0)
 );
 
 -- 9. Substation-to-substation connections
 CREATE TABLE raforka_updated.connects_to (
-    from_substation_id INTEGER NOT NULL
-        REFERENCES raforka_updated.substation(substation_id),
-    to_substation_id   INTEGER NOT NULL
-        REFERENCES raforka_updated.substation(substation_id),
+    from_substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
+    to_substation_id   INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id),
     distance           DOUBLE PRECISION NOT NULL,
     value_kwh          DOUBLE PRECISION,
     max_capacity_mw    DOUBLE PRECISION DEFAULT 0,
     PRIMARY KEY (from_substation_id, to_substation_id),
 
-    CONSTRAINT no_self_connection
-        CHECK (from_substation_id <> to_substation_id),
-
-    CONSTRAINT chk_distance_positive
-        CHECK (distance > 0),
-
-    CONSTRAINT chk_capacity_non_negative
-        CHECK (max_capacity_mw >= 0),
-
-    CONSTRAINT chk_connects_flow_non_negative
-        CHECK (value_kwh IS NULL OR value_kwh >= 0)
+    CONSTRAINT no_self_connection CHECK (from_substation_id <> to_substation_id),
+    CONSTRAINT chk_distance_positive CHECK (distance > 0),
+    CONSTRAINT chk_capacity_non_negative CHECK (max_capacity_mw >= 0),
+    CONSTRAINT chk_connects_flow_non_negative CHECK (value_kwh IS NULL OR value_kwh >= 0)
 );
--- Task D
 
-CREATE INDEX idx_production_plant_timestamp
+-- Task D
+CREATE INDEX idx_production_plant_timestamp 
     ON raforka_updated.production (power_plant_id, timestamp);
 
-
-CREATE INDEX idx_production_timestamp
+CREATE INDEX idx_production_timestamp 
     ON raforka_updated.production (timestamp);
 
-
-CREATE INDEX idx_injects_to_plant_timestamp
+CREATE INDEX idx_injects_to_plant_timestamp 
     ON raforka_updated.injects_to (power_plant_id, timestamp);
 
-
-CREATE INDEX idx_injects_to_timestamp
+CREATE INDEX idx_injects_to_timestamp 
     ON raforka_updated.injects_to (timestamp);
 
-
-CREATE INDEX idx_injects_to_substation
+CREATE INDEX idx_injects_to_substation 
     ON raforka_updated.injects_to (substation_id);
 
-
-CREATE INDEX idx_withdraws_timestamp
+CREATE INDEX idx_withdraws_timestamp 
     ON raforka_updated.withdraws_from (timestamp);
-
 
 CREATE INDEX idx_withdraws_customer
     ON raforka_updated.withdraws_from (customer_id);
 
-
 CREATE INDEX idx_withdraws_substation
     ON raforka_updated.withdraws_from (substation_id);
-
 
 CREATE INDEX idx_connects_from
     ON raforka_updated.connects_to (from_substation_id);
