@@ -85,6 +85,8 @@ CREATE TABLE raforka_updated.connects_to(
     CONSTRAINT unique_connection UNIQUE (from_substation_id, to_substation_id)
 );
 
+-- Task D
+
 CREATE INDEX idx_production_plant_timestamp
     ON raforka_updated.production (power_plant_id, timestamp);
 

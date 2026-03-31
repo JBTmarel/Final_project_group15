@@ -1,8 +1,11 @@
 # Task C5
+from statistics import mode
+
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, union_all, literal
 from datetime import datetime
+from sqlalchemy.dialects.postgresql import insert
 
 from app.db.tables.station import Station
 from app.db.tables.substation import Substation      
@@ -251,47 +254,45 @@ async def insert_measurements_data(
     # Call the function!
     productions, injections, withdrawals = build_insert_objects(parsed_rows)
 
+    from sqlalchemy.dialects.postgresql import insert
+
     try:
         if mode == "single" or mode == "bulk":
-            for obj in productions:
-                db.add(obj)
-            db.commit()
+            if productions:
+                db.execute(
+                    insert(Production).values([
+                        {"power_plant_id": obj.power_plant_id, 
+                        "timestamp": obj.timestamp, 
+                        "value_kwh": obj.value_kwh}
+                        for obj in productions
+                    ]).on_conflict_do_nothing()
+                )
+                db.commit()
 
-            for obj in injections:
-                db.add(obj)
-            db.commit()
+            if injections:
+                db.execute(
+                    insert(InjectsTo).values([
+                        {"power_plant_id": obj.power_plant_id,
+                        "production_timestamp": obj.production_timestamp,
+                        "substation_id": obj.substation_id,
+                        "timestamp": obj.timestamp,
+                        "value_kwh": obj.value_kwh}
+                        for obj in injections
+                    ]).on_conflict_do_nothing()
+                )
+                db.commit()
 
-            for obj in withdrawals:
-                db.add(obj)
-            db.commit()
-
-        elif mode == "fallback":
-            for obj in productions:
-                try:
-                    db.add(obj)
-                    db.flush()
-                except Exception:
-                    db.rollback()
-                    continue
-            db.commit()
-
-            for obj in injections:
-                try:
-                    db.add(obj)
-                    db.flush()
-                except Exception:
-                    db.rollback()
-                    continue
-            db.commit()
-
-            for obj in withdrawals:
-                try:
-                    db.add(obj)
-                    db.flush()
-                except Exception:
-                    db.rollback()
-                    continue
-            db.commit()
+            if withdrawals:
+                db.execute(
+                    insert(WithdrawsFrom).values([
+                        {"customer_id": obj.customer_id,
+                        "substation_id": obj.substation_id,
+                        "timestamp": obj.timestamp,
+                        "value_kwh": obj.value_kwh}
+                        for obj in withdrawals
+                    ]).on_conflict_do_nothing()
+                )
+                db.commit()
 
         else:
             raise HTTPException(status_code=400, detail="Invalid mode")

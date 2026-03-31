@@ -216,3 +216,4 @@ JOIN monthly_total_injection mti
 FROM raforka_updated.v_monthly_plant_energy
 GROUP BY power_plant_source
 ORDER BY power_plant_source;
+
