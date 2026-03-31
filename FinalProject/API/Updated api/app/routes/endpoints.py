@@ -7,7 +7,7 @@ from app.services.service import (
     get_updated_monthly_energy_flow_data,
     get_updated_monthly_customer_usage_data,
     get_updated_monthly_plant_loss_ratios_data,
-    insert_test_measurement_data
+    insert_measurements_data
 )
 from app.utils.validate_date_range import validate_date_range_helper
 from datetime import datetime
@@ -82,18 +82,19 @@ Endpoint 4: insert_measurements()
 '''
 
 #From legacy:
-@router.post("/test-measurement-data")
+@router.post("/measurements-data")
 async def insert_test_measurement(
     mode: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_orkuflaedi_session)
 ):
-    print(f"Calling [POST] /{db_name}/test-measurement-data")
+    print(f"Calling [POST] /{db_name}/measurements-data")
 
-    result = await insert_test_measurement_data(file, db, mode)
+    result = await insert_measurements_data(file, db, mode)
     return result
 
 # Task F1
 '''
 Endpoint 5: get_substations_gridflow()
 '''
+

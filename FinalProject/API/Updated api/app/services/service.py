@@ -188,6 +188,7 @@ def get_updated_monthly_plant_loss_ratios_data(
 
 # Task E1
 '''Service 4: insert_test_measurement_data()'''
+
 async def insert_measurements_data(
     file: UploadFile,
     db: Session,
