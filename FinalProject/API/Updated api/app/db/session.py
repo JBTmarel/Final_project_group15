@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 USER = "postgres"
-PASSWORD = "221103"
+PASSWORD = "orri"
 PORT = "5432"
 DATABASE_NAME = "OrkuflaediIsland"
 
