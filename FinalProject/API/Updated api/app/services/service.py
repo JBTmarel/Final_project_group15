@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, union_all, literal
 from datetime import datetime
 
-from app.db.tables.production import Production
-from app.db.tables.injects_to import InjectsTo
-from app.db.tables.withdraws_from import WithdrawsFrom
 from app.db.tables.station import Station
+from app.db.tables.substation import Substation      
+from app.db.tables.power_plant import PowerPlant     
+from app.db.tables.production import Production      
+from app.db.tables.injects_to import InjectsTo       
+from app.db.tables.withdraws_from import WithdrawsFrom
 from app.db.tables.customer import Customer
 from app.db.tables.v_monthly_plant_energy import VMonthlyPlantEnergy
 from app.models.monthly_energy_flow_model import MonthlyPlantEnergyFlowModel
@@ -16,6 +18,8 @@ from app.models.monthly_plant_loss_ratios import MonthlyPlantLossRatiosModel
 from app.models.parsed_data.measurement_data import MeasurementData
 from app.parsers.parse_test_measurment_csv import parse_measurements_csv
 from app.utils.validate_file_type import validate_file_type
+
+_ = [Substation, PowerPlant]
 
 '''
 Service 1: get_updated_monthly_energy_flow_data()
@@ -188,14 +192,12 @@ def get_updated_monthly_plant_loss_ratios_data(
 
 # Task E1
 '''Service 4: insert_test_measurement_data()'''
-
 async def insert_measurements_data(
     file: UploadFile,
     db: Session,
     mode: str = "bulk"
 ):
     validate_file_type(file, allowed_extensions=[".csv"])
-
     raw_data = await file.read()
     raw_text = raw_data.decode()
 
@@ -205,17 +207,19 @@ async def insert_measurements_data(
     if not parsed_rows:
         raise HTTPException(status_code=400, detail="No valid rows found")
 
-    # Build lookup maps to convert text references to foreign key IDs
     station_map = {s.name: s.id for s in db.query(Station).all()}
     customer_map = {c.name: c.id for c in db.query(Customer).all()}
 
     def build_insert_objects(rows):
-        objects = []
+        productions = []
+        injections = []
+        withdrawals = []
+
         for row in rows:
             if row.tegund_maelingar == "Framleiðsla":
                 pp_id = station_map.get(row.eining_heiti)
                 if pp_id:
-                    objects.append(Production(
+                    productions.append(Production(
                         power_plant_id=pp_id,
                         timestamp=row.timi,
                         value_kwh=row.gildi_kwh
@@ -224,7 +228,7 @@ async def insert_measurements_data(
                 pp_id = station_map.get(row.eining_heiti)
                 sub_id = station_map.get(row.sendandi_maelingar)
                 if pp_id and sub_id:
-                    objects.append(InjectsTo(
+                    injections.append(InjectsTo(
                         power_plant_id=pp_id,
                         production_timestamp=row.timi,
                         substation_id=sub_id,
@@ -235,27 +239,52 @@ async def insert_measurements_data(
                 sub_id = station_map.get(row.sendandi_maelingar)
                 customer_id = customer_map.get(row.notandi_heiti)
                 if sub_id and customer_id:
-                    objects.append(WithdrawsFrom(
+                    withdrawals.append(WithdrawsFrom(
                         customer_id=customer_id,
                         substation_id=sub_id,
                         timestamp=row.timi,
                         value_kwh=row.gildi_kwh
                     ))
-        return objects
+
+        return productions, injections, withdrawals
+
+    # Call the function!
+    productions, injections, withdrawals = build_insert_objects(parsed_rows)
 
     try:
-        if mode == "single":
-            for obj in build_insert_objects(parsed_rows):
+        if mode == "single" or mode == "bulk":
+            for obj in productions:
                 db.add(obj)
             db.commit()
 
-        elif mode == "bulk":
-            for obj in build_insert_objects(parsed_rows):
+            for obj in injections:
+                db.add(obj)
+            db.commit()
+
+            for obj in withdrawals:
                 db.add(obj)
             db.commit()
 
         elif mode == "fallback":
-            for obj in build_insert_objects(parsed_rows):
+            for obj in productions:
+                try:
+                    db.add(obj)
+                    db.flush()
+                except Exception:
+                    db.rollback()
+                    continue
+            db.commit()
+
+            for obj in injections:
+                try:
+                    db.add(obj)
+                    db.flush()
+                except Exception:
+                    db.rollback()
+                    continue
+            db.commit()
+
+            for obj in withdrawals:
                 try:
                     db.add(obj)
                     db.flush()

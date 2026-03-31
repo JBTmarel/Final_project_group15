@@ -84,3 +84,41 @@ CREATE TABLE raforka_updated.connects_to(
     CONSTRAINT no_self_connection CHECK (from_substation_id <> to_substation_id),
     CONSTRAINT unique_connection UNIQUE (from_substation_id, to_substation_id)
 );
+
+CREATE INDEX idx_production_plant_timestamp
+    ON raforka_updated.production (power_plant_id, timestamp);
+
+
+CREATE INDEX idx_production_timestamp
+    ON raforka_updated.production (timestamp);
+
+
+CREATE INDEX idx_injects_to_plant_timestamp
+    ON raforka_updated.injects_to (power_plant_id, timestamp);
+
+
+CREATE INDEX idx_injects_to_timestamp
+    ON raforka_updated.injects_to (timestamp);
+
+
+CREATE INDEX idx_injects_to_substation
+    ON raforka_updated.injects_to (substation_id);
+
+
+CREATE INDEX idx_withdraws_timestamp
+    ON raforka_updated.withdraws_from (timestamp);
+
+
+CREATE INDEX idx_withdraws_customer
+    ON raforka_updated.withdraws_from (customer_id);
+
+
+CREATE INDEX idx_withdraws_substation
+    ON raforka_updated.withdraws_from (substation_id);
+
+
+CREATE INDEX idx_connects_from
+    ON raforka_updated.connects_to (from_substation_id);
+
+CREATE INDEX idx_connects_to
+    ON raforka_updated.connects_to (to_substation_id);
