@@ -4,7 +4,7 @@ import math
 
 # --- CONFIGURATION ---
 USER = "postgres"
-PASSWORD = "orri"  # Replace with your actual password
+PASSWORD = "221103"  # Replace with your actual password
 PORT = "5432"
 HOST = "localhost"
 DATABASE_NAME = "OrkuflaediIsland"
