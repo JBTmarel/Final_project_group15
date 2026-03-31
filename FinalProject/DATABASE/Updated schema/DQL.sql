@@ -53,11 +53,10 @@ GROUP BY power_plant_source, measurement_type, year, month
 ORDER BY power_plant_source, month ASC, total_kwh DESC;
 
 
-
-
 -- Query 2:
 -- aftur sama ves með stafrófsröð
 SELECT
+    s.name AS power_plant_source,
     EXTRACT(YEAR FROM w.timestamp) AS year,
     EXTRACT(MONTH FROM w.timestamp) AS month,
     c.name AS customer_name,
@@ -65,16 +64,19 @@ SELECT
 FROM raforka_updated.withdraws_from w
 JOIN raforka_updated.customer c
     ON c.id = w.customer_id
+JOIN raforka_updated.station s
+    ON s.id = w.power_plant_source_id
 WHERE w.timestamp >= '2025-01-01'
   AND w.timestamp < '2026-01-01'
 GROUP BY
+    s.name,
+    c.name,
     EXTRACT(YEAR FROM w.timestamp),
-    EXTRACT(MONTH FROM w.timestamp),
-    c.name
+    EXTRACT(MONTH FROM w.timestamp)
 ORDER BY
+    power_plant_source,
     month ASC,
     customer_name ASC;
-
 
 -- Query 3:
 -- VIEWS

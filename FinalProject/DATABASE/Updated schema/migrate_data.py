@@ -103,14 +103,21 @@ def migrate():
 
         # Step 7: Withdraws_from
         run_step(conn, "Step 7: Withdraws_from", f"""
-            INSERT INTO {NEW_SCHEMA}.withdraws_from (customer_id, substation_id, timestamp, value_kwh)
-            SELECT c.id, sub.substation_id, om.timi, om.gildi_kwh
+            INSERT INTO {NEW_SCHEMA}.withdraws_from (customer_id, substation_id, timestamp, value_kwh, power_plant_source_id)
+            SELECT 
+                c.id, 
+                sub.substation_id, 
+                om.timi, 
+                om.gildi_kwh,
+                pp.power_plant_id
             FROM {LEGACY_SCHEMA}.orku_maelingar om
             JOIN {NEW_SCHEMA}.customer c ON om.notandi_heiti = c.name
             JOIN {NEW_SCHEMA}.station s ON om.sendandi_maelingar = s.name
             JOIN {NEW_SCHEMA}.substation sub ON s.id = sub.substation_id
+            JOIN {NEW_SCHEMA}.station s_p ON om.eining_heiti = s_p.name
+            JOIN {NEW_SCHEMA}.power_plant pp ON s_p.id = pp.power_plant_id
             WHERE om.tegund_maelingar = 'Úttekt';
-        """)
+        """) #'\u00dattekt';
 
         # Step 8: Connects_to (Substation Topology with Distance Calculation)
         run_step(conn, "Step 8: Substation Connections", f"""

@@ -70,7 +70,8 @@ CREATE TABLE raforka_updated.withdraws_from(
     customer_id INTEGER NOT NULL REFERENCES raforka_updated.customer(id),
     substation_id INTEGER NOT NULL REFERENCES raforka_updated.substation(substation_id), 
     timestamp TIMESTAMP NOT NULL,
-    value_kwh NUMERIC NOT NULL
+    value_kwh NUMERIC NOT NULL,
+    power_plant_source_id INTEGER REFERENCES raforka_updated.power_plant(power_plant_id)
 );
 
 -- 9. Substation Connections (Self-referencing 'connects_to')
@@ -84,3 +85,4 @@ CREATE TABLE raforka_updated.connects_to(
     CONSTRAINT no_self_connection CHECK (from_substation_id <> to_substation_id),
     CONSTRAINT unique_connection UNIQUE (from_substation_id, to_substation_id)
 );
+
