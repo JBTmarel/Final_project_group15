@@ -55,6 +55,7 @@ ORDER BY power_plant_source, month ASC, total_kwh DESC;
 
 -- Query 2:
 -- aftur sama ves með stafrófsröð
+-- frá Evu:
 SELECT
     s.name AS power_plant_source,
     EXTRACT(YEAR FROM w.timestamp) AS year,
@@ -77,6 +78,7 @@ ORDER BY
     power_plant_source,
     month ASC,
     customer_name ASC;
+
 
 -- Query 3:
 -- VIEWS
@@ -140,9 +142,9 @@ SELECT
         0
     ) AS attributed_withdrawal_kwh
 FROM monthly_production mp
-JOIN raforka_updated.power_plant pp
+JOIN raforka_updated.power_plant pp 
   ON pp.power_plant_id = mp.power_plant_id
-JOIN raforka_updated.station s
+JOIN raforka_updated.station s 
   ON s.id = pp.power_plant_id
 JOIN monthly_injection mi
   ON mi.power_plant_id = mp.power_plant_id
@@ -167,3 +169,343 @@ JOIN monthly_total_injection mti
 FROM raforka_updated.v_monthly_plant_energy
 GROUP BY power_plant_source
 ORDER BY power_plant_source;
+
+-- Task F
+
+-- ============================================================
+-- Task F: Substation Flow Estimation
+-- Cleaner version with:
+-- 1) distance update included
+-- 2) explicit substation lookup in writeback WHERE
+-- 3) max_capacity_mw based on peak hourly flow proxy
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- Step 1: Calculate and store distances between connected substations
+-- ------------------------------------------------------------
+UPDATE raforka_updated.connects_to ct
+SET distance = calc.distance_km
+FROM (
+    SELECT
+        ct2.from_substation_id,
+        ct2.to_substation_id,
+        6371.0 * 2 * ASIN(
+            SQRT(
+                POWER(SIN(RADIANS(s2.y_coordinates - s1.y_coordinates) / 2), 2)
+                + COS(RADIANS(s1.y_coordinates))
+                * COS(RADIANS(s2.y_coordinates))
+                * POWER(SIN(RADIANS(s2.x_coordinates - s1.x_coordinates) / 2), 2)
+            )
+        ) AS distance_km
+    FROM raforka_updated.connects_to ct2
+    JOIN raforka_updated.station s1
+      ON s1.id = ct2.from_substation_id
+    JOIN raforka_updated.station s2
+      ON s2.id = ct2.to_substation_id
+) calc
+WHERE ct.from_substation_id = calc.from_substation_id
+  AND ct.to_substation_id   = calc.to_substation_id;
+
+
+-- ------------------------------------------------------------
+-- Step 2: Flow estimation query for a date range
+-- Replace literals with API params later
+-- ------------------------------------------------------------
+WITH
+s1_injection AS (
+    SELECT SUM(i.value_kwh) AS total_kwh
+    FROM raforka_updated.injects_to i
+    JOIN raforka_updated.substation sub
+      ON i.substation_id = sub.substation_id
+    JOIN raforka_updated.station s
+      ON sub.substation_id = s.id
+    WHERE s.name = 'S1_Krókur'
+      AND i.timestamp >= '2025-01-01'
+      AND i.timestamp <  '2026-01-01'
+),
+s2_injection AS (
+    SELECT SUM(i.value_kwh) AS total_kwh
+    FROM raforka_updated.injects_to i
+    JOIN raforka_updated.substation sub
+      ON i.substation_id = sub.substation_id
+    JOIN raforka_updated.station s
+      ON sub.substation_id = s.id
+    WHERE s.name = 'S2_Rimakot'
+      AND i.timestamp >= '2025-01-01'
+      AND i.timestamp <  '2026-01-01'
+),
+s3_withdrawal AS (
+    SELECT SUM(w.value_kwh) AS total_kwh
+    FROM raforka_updated.withdraws_from w
+    JOIN raforka_updated.substation sub
+      ON w.substation_id = sub.substation_id
+    JOIN raforka_updated.station s
+      ON sub.substation_id = s.id
+    WHERE s.name = 'S3_Vestmannaeyjar'
+      AND w.timestamp >= '2025-01-01'
+      AND w.timestamp <  '2026-01-01'
+),
+distances AS (
+    SELECT
+        MAX(CASE WHEN sf.name = 'S1_Krókur'  THEN ct.distance END) AS d_s1_s2,
+        MAX(CASE WHEN sf.name = 'S2_Rimakot' THEN ct.distance END) AS d_s2_s3
+    FROM raforka_updated.connects_to ct
+    JOIN raforka_updated.substation sub_f
+      ON ct.from_substation_id = sub_f.substation_id
+    JOIN raforka_updated.station sf
+      ON sub_f.substation_id = sf.id
+),
+flow AS (
+    SELECT
+        s1.total_kwh AS injected_s1,
+        s2.total_kwh AS injected_s2,
+        s3.total_kwh AS withdrawn_s3,
+        (s1.total_kwh + s2.total_kwh) - s3.total_kwh AS total_system_loss,
+        d.d_s1_s2,
+        d.d_s2_s3,
+        d.d_s1_s2 + d.d_s2_s3 AS total_distance,
+        ((s1.total_kwh + s2.total_kwh) - s3.total_kwh)
+            * (d.d_s1_s2 / (d.d_s1_s2 + d.d_s2_s3)) AS loss_s1_s2,
+        ((s1.total_kwh + s2.total_kwh) - s3.total_kwh)
+            * (d.d_s2_s3 / (d.d_s1_s2 + d.d_s2_s3)) AS loss_s2_s3
+    FROM s1_injection s1
+    CROSS JOIN s2_injection s2
+    CROSS JOIN s3_withdrawal s3
+    CROSS JOIN distances d
+)
+SELECT
+    'S1_Krókur -> S2_Rimakot' AS segment,
+    ROUND(d_s1_s2::NUMERIC, 2) AS distance_km,
+    ROUND(injected_s1::NUMERIC, 2) AS flow_in_kwh,
+    ROUND(loss_s1_s2::NUMERIC, 2) AS loss_kwh,
+    ROUND((injected_s1 - loss_s1_s2)::NUMERIC, 2) AS flow_out_kwh,
+    ROUND((loss_s1_s2 / NULLIF(injected_s1, 0) * 100)::NUMERIC, 4) AS loss_pct,
+    ROUND(((injected_s1 - loss_s1_s2) / NULLIF(injected_s1, 0) * 100)::NUMERIC, 4) AS efficiency_pct
+FROM flow
+
+UNION ALL
+
+SELECT
+    'S2_Rimakot -> S3_Vestmannaeyjar' AS segment,
+    ROUND(d_s2_s3::NUMERIC, 2) AS distance_km,
+    ROUND((injected_s1 - loss_s1_s2 + injected_s2)::NUMERIC, 2) AS flow_in_kwh,
+    ROUND(loss_s2_s3::NUMERIC, 2) AS loss_kwh,
+    ROUND(withdrawn_s3::NUMERIC, 2) AS flow_out_kwh,
+    ROUND((loss_s2_s3 / NULLIF((injected_s1 - loss_s1_s2 + injected_s2), 0) * 100)::NUMERIC, 4) AS loss_pct,
+    ROUND((withdrawn_s3 / NULLIF((injected_s1 - loss_s1_s2 + injected_s2), 0) * 100)::NUMERIC, 4) AS efficiency_pct
+FROM flow
+
+UNION ALL
+
+SELECT
+    'TOTAL SYSTEM' AS segment,
+    ROUND((d_s1_s2 + d_s2_s3)::NUMERIC, 2) AS distance_km,
+    ROUND((injected_s1 + injected_s2)::NUMERIC, 2) AS flow_in_kwh,
+    ROUND(total_system_loss::NUMERIC, 2) AS loss_kwh,
+    ROUND(withdrawn_s3::NUMERIC, 2) AS flow_out_kwh,
+    ROUND((total_system_loss / NULLIF((injected_s1 + injected_s2), 0) * 100)::NUMERIC, 4) AS loss_pct,
+    ROUND((withdrawn_s3 / NULLIF((injected_s1 + injected_s2), 0) * 100)::NUMERIC, 4) AS efficiency_pct
+FROM flow;
+
+
+-- ------------------------------------------------------------
+-- Step 3: Write back estimated flows
+-- Uses peak hourly flow proxy for max_capacity_mw
+-- ------------------------------------------------------------
+
+BEGIN;
+
+-- S1 -> S2
+WITH flow AS (
+    SELECT
+        s1.total_kwh AS injected_s1,
+        s2.total_kwh AS injected_s2,
+        s3.total_kwh AS withdrawn_s3,
+        ((s1.total_kwh + s2.total_kwh) - s3.total_kwh)
+            * (d.d_s1_s2 / (d.d_s1_s2 + d.d_s2_s3)) AS loss_s1_s2,
+        ((s1.total_kwh + s2.total_kwh) - s3.total_kwh)
+            * (d.d_s2_s3 / (d.d_s1_s2 + d.d_s2_s3)) AS loss_s2_s3,
+        d.d_s1_s2,
+        d.d_s2_s3
+    FROM
+        (SELECT SUM(i.value_kwh) AS total_kwh
+         FROM raforka_updated.injects_to i
+         JOIN raforka_updated.substation sub
+           ON i.substation_id = sub.substation_id
+         JOIN raforka_updated.station s
+           ON sub.substation_id = s.id
+         WHERE s.name = 'S1_Krókur'
+           AND i.timestamp >= '2025-01-01'
+           AND i.timestamp <  '2026-01-01') s1,
+        (SELECT SUM(i.value_kwh) AS total_kwh
+         FROM raforka_updated.injects_to i
+         JOIN raforka_updated.substation sub
+           ON i.substation_id = sub.substation_id
+         JOIN raforka_updated.station s
+           ON sub.substation_id = s.id
+         WHERE s.name = 'S2_Rimakot'
+           AND i.timestamp >= '2025-01-01'
+           AND i.timestamp <  '2026-01-01') s2,
+        (SELECT SUM(w.value_kwh) AS total_kwh
+         FROM raforka_updated.withdraws_from w
+         JOIN raforka_updated.substation sub
+           ON w.substation_id = sub.substation_id
+         JOIN raforka_updated.station s
+           ON sub.substation_id = s.id
+         WHERE s.name = 'S3_Vestmannaeyjar'
+           AND w.timestamp >= '2025-01-01'
+           AND w.timestamp <  '2026-01-01') s3,
+        (SELECT
+             MAX(CASE WHEN sf.name = 'S1_Krókur'  THEN ct.distance END) AS d_s1_s2,
+             MAX(CASE WHEN sf.name = 'S2_Rimakot' THEN ct.distance END) AS d_s2_s3
+         FROM raforka_updated.connects_to ct
+         JOIN raforka_updated.substation sub_f
+           ON ct.from_substation_id = sub_f.substation_id
+         JOIN raforka_updated.station sf
+           ON sub_f.substation_id = sf.id) d
+),
+peak_capacity AS (
+    SELECT MAX(hourly_flow_kwh) / 1000.0 AS peak_mw
+    FROM (
+        SELECT
+            i.timestamp,
+            SUM(i.value_kwh) AS hourly_flow_kwh
+        FROM raforka_updated.injects_to i
+        JOIN raforka_updated.substation sub
+          ON i.substation_id = sub.substation_id
+        JOIN raforka_updated.station s
+          ON sub.substation_id = s.id
+        WHERE s.name = 'S1_Krókur'
+          AND i.timestamp >= '2025-01-01'
+          AND i.timestamp <  '2026-01-01'
+        GROUP BY i.timestamp
+    ) hourly
+)
+UPDATE raforka_updated.connects_to ct
+SET
+    value_kwh = f.injected_s1 - f.loss_s1_s2,
+    max_capacity_mw = pc.peak_mw
+FROM flow f
+CROSS JOIN peak_capacity pc
+WHERE ct.from_substation_id = (
+        SELECT sub.substation_id
+        FROM raforka_updated.substation sub
+        JOIN raforka_updated.station s
+          ON sub.substation_id = s.id
+        WHERE s.name = 'S1_Krókur'
+      )
+  AND ct.to_substation_id = (
+        SELECT sub.substation_id
+        FROM raforka_updated.substation sub
+        JOIN raforka_updated.station s
+          ON sub.substation_id = s.id
+        WHERE s.name = 'S2_Rimakot'
+      );
+
+
+-- S2 -> S3
+WITH flow AS (
+    SELECT
+        s1.total_kwh AS injected_s1,
+        s2.total_kwh AS injected_s2,
+        s3.total_kwh AS withdrawn_s3,
+        ((s1.total_kwh + s2.total_kwh) - s3.total_kwh)
+            * (d.d_s1_s2 / (d.d_s1_s2 + d.d_s2_s3)) AS loss_s1_s2,
+        ((s1.total_kwh + s2.total_kwh) - s3.total_kwh)
+            * (d.d_s2_s3 / (d.d_s1_s2 + d.d_s2_s3)) AS loss_s2_s3,
+        d.d_s1_s2,
+        d.d_s2_s3
+    FROM
+        (SELECT SUM(i.value_kwh) AS total_kwh
+         FROM raforka_updated.injects_to i
+         JOIN raforka_updated.substation sub
+           ON i.substation_id = sub.substation_id
+         JOIN raforka_updated.station s
+           ON sub.substation_id = s.id
+         WHERE s.name = 'S1_Krókur'
+           AND i.timestamp >= '2025-01-01'
+           AND i.timestamp <  '2026-01-01') s1,
+        (SELECT SUM(i.value_kwh) AS total_kwh
+         FROM raforka_updated.injects_to i
+         JOIN raforka_updated.substation sub
+           ON i.substation_id = sub.substation_id
+         JOIN raforka_updated.station s
+           ON sub.substation_id = s.id
+         WHERE s.name = 'S2_Rimakot'
+           AND i.timestamp >= '2025-01-01'
+           AND i.timestamp <  '2026-01-01') s2,
+        (SELECT SUM(w.value_kwh) AS total_kwh
+         FROM raforka_updated.withdraws_from w
+         JOIN raforka_updated.substation sub
+           ON w.substation_id = sub.substation_id
+         JOIN raforka_updated.station s
+           ON sub.substation_id = s.id
+         WHERE s.name = 'S3_Vestmannaeyjar'
+           AND w.timestamp >= '2025-01-01'
+           AND w.timestamp <  '2026-01-01') s3,
+        (SELECT
+             MAX(CASE WHEN sf.name = 'S1_Krókur'  THEN ct.distance END) AS d_s1_s2,
+             MAX(CASE WHEN sf.name = 'S2_Rimakot' THEN ct.distance END) AS d_s2_s3
+         FROM raforka_updated.connects_to ct
+         JOIN raforka_updated.substation sub_f
+           ON ct.from_substation_id = sub_f.substation_id
+         JOIN raforka_updated.station sf
+           ON sub_f.substation_id = sf.id) d
+),
+peak_capacity AS (
+    SELECT MAX(hourly_flow_kwh) / 1000.0 AS peak_mw
+    FROM (
+        SELECT
+            i.timestamp,
+            SUM(i.value_kwh) AS hourly_flow_kwh
+        FROM raforka_updated.injects_to i
+        JOIN raforka_updated.substation sub
+          ON i.substation_id = sub.substation_id
+        JOIN raforka_updated.station s
+          ON sub.substation_id = s.id
+        WHERE s.name IN ('S1_Krókur', 'S2_Rimakot')
+          AND i.timestamp >= '2025-01-01'
+          AND i.timestamp <  '2026-01-01'
+        GROUP BY i.timestamp
+    ) hourly
+)
+UPDATE raforka_updated.connects_to ct
+SET
+    value_kwh = f.withdrawn_s3,
+    max_capacity_mw = pc.peak_mw
+FROM flow f
+CROSS JOIN peak_capacity pc
+WHERE ct.from_substation_id = (
+        SELECT sub.substation_id
+        FROM raforka_updated.substation sub
+        JOIN raforka_updated.station s
+          ON sub.substation_id = s.id
+        WHERE s.name = 'S2_Rimakot'
+      )
+  AND ct.to_substation_id = (
+        SELECT sub.substation_id
+        FROM raforka_updated.substation sub
+        JOIN raforka_updated.station s
+          ON sub.substation_id = s.id
+        WHERE s.name = 'S3_Vestmannaeyjar'
+      );
+
+-- Check results before commit
+SELECT
+    sf.name AS from_station,
+    st.name AS to_station,
+    ct.distance,
+    ct.value_kwh,
+    ct.max_capacity_mw
+FROM raforka_updated.connects_to ct
+JOIN raforka_updated.station sf
+  ON sf.id = ct.from_substation_id
+JOIN raforka_updated.station st
+  ON st.id = ct.to_substation_id
+ORDER BY sf.name, st.name;
+
+-- If it looks good:
+COMMIT;
+
+-- If not:
+-- ROLLBACK;

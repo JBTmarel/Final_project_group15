@@ -1,4 +1,4 @@
-# Task E1 
+# Task E1
 
 from dataclasses import dataclass
 from datetime import datetime
