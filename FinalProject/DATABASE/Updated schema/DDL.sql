@@ -17,9 +17,7 @@ CREATE TABLE raforka_updated.station (
     installed_date DATE,
     owner_id       INTEGER NOT NULL REFERENCES raforka_updated.owner(id),
     x_coordinates  DOUBLE PRECISION NOT NULL,
-    y_coordinates  DOUBLE PRECISION NOT NULL,
-
-   
+    y_coordinates  DOUBLE PRECISION NOT NULL  
 );
 
 -- 3. Power plant specialization
@@ -49,10 +47,8 @@ CREATE TABLE raforka_updated.customer (
             founded_year IS NULL OR
             (founded_year >= 1800 AND founded_year <= EXTRACT(YEAR FROM CURRENT_DATE))
         ),
-
     CONSTRAINT chk_customer_ssn_format
         CHECK (ssn ~ '^\d{10}$'),
-
     CONSTRAINT chk_customer_coords_both_or_neither
         CHECK ((x_coordinates IS NULL) = (y_coordinates IS NULL))
 );
@@ -75,7 +71,7 @@ CREATE TABLE raforka_updated.injects_to (
     production_timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     substation_id        INTEGER NOT NULL
         REFERENCES raforka_updated.substation(substation_id),
-    value_kwh            NUMERIC NOT NULL,
+    value_kwh            FLOAT NOT NULL,
     timestamp            TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     PRIMARY KEY (power_plant_id, production_timestamp, substation_id),
     FOREIGN KEY (power_plant_id, production_timestamp)
