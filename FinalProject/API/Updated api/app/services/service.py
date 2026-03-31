@@ -13,9 +13,8 @@ from app.db.tables.v_monthly_plant_energy import VMonthlyPlantEnergy
 from app.models.monthly_energy_flow_model import MonthlyPlantEnergyFlowModel
 from app.models.monthly_company_usage_model import MonthlyCompanyUsageModel
 from app.models.monthly_plant_loss_ratios import MonthlyPlantLossRatiosModel
-from app.db.tables.test_measurement import TestMeasurement
-from app.models.parsed_data.test_measurement_data import TestMeasurementData
-from app.parsers.parse_test_measurment_csv import parse_test_measurement_csv
+from app.models.parsed_data.measurement_data import MeasurementData
+from app.parsers.parse_test_measurment_csv import parse_measurements_csv
 from app.utils.validate_file_type import validate_file_type
 
 '''
@@ -187,64 +186,83 @@ def get_updated_monthly_plant_loss_ratios_data(
         for row in rows
     ]
 
-
-# Kannski óþarfi? :
-
-async def insert_test_measurement_data(
+# Task E1
+'''Service 4: insert_test_measurement_data()'''
+async def insert_measurements_data(
     file: UploadFile,
     db: Session,
     mode: str = "bulk"
 ):
-    validate_file_type(
-        file, 
-        allowed_extensions=[".csv"]
-    )
+    validate_file_type(file, allowed_extensions=[".csv"])
 
     raw_data = await file.read()
     raw_text = raw_data.decode()
 
-    parsed_rows: list[TestMeasurementData]
-    parsed_rows = parse_test_measurement_csv(raw_text)
+    parsed_rows: list[MeasurementData]
+    parsed_rows = parse_measurements_csv(raw_text)
 
     if not parsed_rows:
         raise HTTPException(status_code=400, detail="No valid rows found")
 
+    # Build lookup maps to convert text references to foreign key IDs
+    station_map = {s.name: s.id for s in db.query(Station).all()}
+    customer_map = {c.name: c.id for c in db.query(Customer).all()}
+
+    def build_insert_objects(rows):
+        objects = []
+        for row in rows:
+            if row.tegund_maelingar == "Framleiðsla":
+                pp_id = station_map.get(row.eining_heiti)
+                if pp_id:
+                    objects.append(Production(
+                        power_plant_id=pp_id,
+                        timestamp=row.timi,
+                        value_kwh=row.gildi_kwh
+                    ))
+            elif row.tegund_maelingar == "Innmötun":
+                pp_id = station_map.get(row.eining_heiti)
+                sub_id = station_map.get(row.sendandi_maelingar)
+                if pp_id and sub_id:
+                    objects.append(InjectsTo(
+                        power_plant_id=pp_id,
+                        production_timestamp=row.timi,
+                        substation_id=sub_id,
+                        timestamp=row.timi,
+                        value_kwh=row.gildi_kwh
+                    ))
+            elif row.tegund_maelingar == "Úttekt":
+                sub_id = station_map.get(row.sendandi_maelingar)
+                customer_id = customer_map.get(row.notandi_heiti)
+                if sub_id and customer_id:
+                    objects.append(WithdrawsFrom(
+                        customer_id=customer_id,
+                        substation_id=sub_id,
+                        timestamp=row.timi,
+                        value_kwh=row.gildi_kwh
+                    ))
+        return objects
+
     try:
         if mode == "single":
-            for row in parsed_rows:
-                db.add(
-                    TestMeasurement(
-                        timi=row.timi,
-                        value=row.value
-                    )
-                )
+            for obj in build_insert_objects(parsed_rows):
+                db.add(obj)
             db.commit()
 
         elif mode == "bulk":
-            insert_data = [
-                {
-                    "timi": row.timi,
-                    "value": row.value
-                }
-                for row in parsed_rows
-            ]
-            db.bulk_insert_mappings(TestMeasurement, insert_data)
+            for obj in build_insert_objects(parsed_rows):
+                db.add(obj)
             db.commit()
 
         elif mode == "fallback":
-            for row in parsed_rows:
+            for obj in build_insert_objects(parsed_rows):
                 try:
-                    db.add(
-                        TestMeasurement(
-                            timi=row.timi,
-                            value=row.value
-                        )
-                    )
+                    db.add(obj)
                     db.flush()
                 except Exception:
                     db.rollback()
                     continue
             db.commit()
+
         else:
             raise HTTPException(status_code=400, detail="Invalid mode")
 
@@ -253,7 +271,7 @@ async def insert_test_measurement_data(
             "rows_processed": len(parsed_rows),
             "mode": mode
         }
-    
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

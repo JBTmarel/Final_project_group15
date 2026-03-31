@@ -81,6 +81,18 @@ def get_updated_monthly_plant_loss_ratios(
 Endpoint 4: insert_measurements()
 '''
 
+#From legacy:
+@router.post("/test-measurement-data")
+async def insert_test_measurement(
+    mode: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_orkuflaedi_session)
+):
+    print(f"Calling [POST] /{db_name}/test-measurement-data")
+
+    result = await insert_test_measurement_data(file, db, mode)
+    return result
+
 # Task F1
 '''
 Endpoint 5: get_substations_gridflow()
