@@ -53,12 +53,11 @@ GROUP BY power_plant_source, measurement_type, year, month
 ORDER BY power_plant_source, month ASC, total_kwh DESC;
 
 
-
-
 -- Query 2:
 -- aftur sama ves með stafrófsröð
 -- frá Evu:
 SELECT
+    s.name AS power_plant_source,
     EXTRACT(YEAR FROM w.timestamp) AS year,
     EXTRACT(MONTH FROM w.timestamp) AS month,
     c.name AS customer_name,
@@ -66,66 +65,20 @@ SELECT
 FROM raforka_updated.withdraws_from w
 JOIN raforka_updated.customer c
     ON c.id = w.customer_id
-WHERE w.timestamp >= '2025-01-01'
-  AND w.timestamp < '2026-01-01'
-GROUP BY
-    EXTRACT(YEAR FROM w.timestamp),
-    EXTRACT(MONTH FROM w.timestamp),
-    c.name
-ORDER BY
-    month ASC,
-    customer_name ASC;
-
--- Frá Claude, samt ekki nkl sömu tölur, ehv skítamix 
--- (lowkey ekki hægt að gera nkl sama query með nýja gagnagrunninum?):
-WITH injection_proportions AS (
-    SELECT
-        i.power_plant_id,
-        i.timestamp,
-        i.value_kwh,
-        SUM(i.value_kwh) OVER (PARTITION BY i.timestamp) AS total_injection_kwh
-    FROM raforka_updated.injects_to i
-    WHERE i.timestamp >= '2025-01-01'
-      AND i.timestamp < '2026-01-01'
-)
-SELECT
-    s.name AS power_plant_source,
-    EXTRACT(YEAR FROM w.timestamp)::INTEGER AS year,
-    EXTRACT(MONTH FROM w.timestamp)::INTEGER AS month,
-    c.name AS customer_name,
-    SUM(
-        w.value_kwh 
-        * ip.value_kwh 
-        / NULLIF(ip.total_injection_kwh, 0)
-    ) AS total_kwh
-FROM raforka_updated.withdraws_from w
-JOIN raforka_updated.customer c
-    ON c.id = w.customer_id
-JOIN injection_proportions ip
-    ON ip.timestamp = w.timestamp
 JOIN raforka_updated.station s
-    ON s.id = ip.power_plant_id
+    ON s.id = w.power_plant_source_id
 WHERE w.timestamp >= '2025-01-01'
   AND w.timestamp < '2026-01-01'
 GROUP BY
     s.name,
+    c.name,
     EXTRACT(YEAR FROM w.timestamp),
-    EXTRACT(MONTH FROM w.timestamp),
-    c.name
+    EXTRACT(MONTH FROM w.timestamp)
 ORDER BY
-    s.name ASC,
+    power_plant_source,
     month ASC,
     customer_name ASC;
 
-
-SELECT 
-    timestamp,
-    power_plant_id,
-    value_kwh,
-    SUM(value_kwh) OVER (PARTITION BY timestamp) AS total,
-    value_kwh / SUM(value_kwh) OVER (PARTITION BY timestamp) AS proportion
-FROM raforka_updated.injects_to
-WHERE timestamp = '2025-01-01 00:00:00';
 
 -- Query 3:
 -- VIEWS

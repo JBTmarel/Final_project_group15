@@ -93,9 +93,10 @@ CREATE TABLE raforka_updated.withdraws_from (
         REFERENCES raforka_updated.substation(substation_id),
     timestamp     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     value_kwh     NUMERIC NOT NULL,
+    power_plant_source_id INTEGER REFERENCES raforka_updated.power_plant(power_plant_id)
 
     CONSTRAINT chk_withdraws_kwh_positive
-        CHECK (value_kwh > 0)
+        CHECK (value_kwh > 0),
 );
 
 -- 9. Substation-to-substation connections
